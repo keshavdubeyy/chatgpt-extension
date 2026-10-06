@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Mell - Chat Manager for ChatGPT",
+  "short_name": "Mell",
+  "version": "1.0.0",
+  "description": "Select ChatGPT chats in bulk from the sidebar or Search, then archive or delete them using ChatGPT's own menus.",
+  "minimum_chrome_version": "111",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

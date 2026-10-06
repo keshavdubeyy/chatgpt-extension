@@ -1,0 +1,666 @@
+/* Mell — Chat Manager for ChatGPT. Every selector targets only elements/classes this
+   extension adds (prefixed "cgc-"), so ChatGPT's own styles are untouched.
+
+   Colors: content.js reads the real colors of ChatGPT's open Search window
+   (search text, an inactive tab, the window background) and sets them on
+   <html> as --cgc-live-*. Everything below is built from those, so it
+   matches whichever theme ChatGPT is showing. Hover tints and borders are
+   mixed from the text color, so they're light-on-dark in dark mode and
+   dark-on-light in light mode automatically.
+
+   The fixed values are only fallbacks for before the first read.
+   content.js also sets data-cgc-theme="dark|light" on <html> from the
+   measured background, for the few colors that can't be mixed (red). */
+
+#cgc-sidebar-actions,
+.cgc-sidebar-bar,
+.cgc-group-heading,
+.cgc-row-date,
+.cgc-fmenu,
+.cgc-native-section,
+.cgc-select-entry,
+.cgc-selection-toolbar,
+.cgc-checkbox,
+.cgc-backdrop {
+  --cgc-text: var(--cgc-live-text, #0d0d0d);
+  --cgc-text-secondary: var(--cgc-live-text-secondary, #5d5d5d);
+  --cgc-text-tertiary: color-mix(in srgb, var(--cgc-text) 45%, transparent);
+  --cgc-surface: var(--cgc-live-surface, #ffffff);
+  --cgc-border: color-mix(in srgb, var(--cgc-text) 12%, transparent);
+  --cgc-border-strong: color-mix(in srgb, var(--cgc-text) 20%, transparent);
+  --cgc-hover: color-mix(in srgb, var(--cgc-text) 8%, transparent);
+  --cgc-on-text: var(--cgc-surface); /* mark on a filled text-colored shape */
+  --cgc-backdrop: rgba(0, 0, 0, 0.2);
+  /* Our submenu: fixed colors matching ChatGPT's own menus (sampled from
+     ChatGPT: dark menu #2b2b2b, hover row #3b3b3b, divider #424242). */
+  --cgc-menu-surface: #ffffff;
+  --cgc-menu-hover: #f3f3f3;
+  --cgc-menu-divider: rgba(0, 0, 0, 0.1);
+  --cgc-menu-border: rgba(0, 0, 0, 0.08);
+  --cgc-menu-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+
+  /* Destructive: only the final Delete button in the dialog. */
+  --cgc-danger: #e02e2a;
+  --cgc-danger-tint: rgba(224, 46, 42, 0.08);
+  --cgc-danger-tint-hover: rgba(224, 46, 42, 0.14);
+}
+
+html[data-cgc-theme="dark"] :is(#cgc-sidebar-actions, .cgc-sidebar-bar, .cgc-group-heading, .cgc-row-date, .cgc-fmenu, .cgc-native-section, .cgc-select-entry, .cgc-selection-toolbar, .cgc-checkbox, .cgc-backdrop) {
+  --cgc-backdrop: rgba(0, 0, 0, 0.5);
+  --cgc-menu-surface: #2b2b2b;
+  --cgc-menu-hover: #3b3b3b;
+  --cgc-menu-divider: #424242;
+  --cgc-menu-border: rgba(255, 255, 255, 0.05);
+  --cgc-menu-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --cgc-danger: #f0706a;
+  --cgc-danger-tint: rgba(240, 112, 106, 0.14);
+  --cgc-danger-tint-hover: rgba(240, 112, 106, 0.22);
+}
+
+/* The `hidden` attribute must win over the display rules below. */
+.cgc-selection-toolbar[hidden],
+.cgc-selection-toolbar [hidden],
+.cgc-select-entry[hidden],
+#cgc-sidebar-actions[hidden],
+#cgc-sidebar-actions [hidden],
+.cgc-sidebar-bar[hidden],
+.cgc-backdrop [hidden] {
+  display: none !important;
+}
+
+.cgc-icon {
+  display: block;
+  flex: none;
+}
+
+/* =========================================================================
+   Sidebar: "Recents ……… Select"  /  "Recents …… 3 selected  Done"
+   Text size is copied from the heading by content.js (--cgc-ref-*).
+   ========================================================================= */
+
+/* Lets the actions sit at the right end of the heading row. */
+.cgc-section-host {
+  display: flex !important;
+  align-items: center;
+}
+
+#cgc-sidebar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding-left: 8px;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+/* Same size, weight and grey as the "Recents" label (copied by content.js);
+   only hover brightens. Compact: the heading row is short. */
+#cgc-sidebar-actions .cgc-action,
+#cgc-sidebar-actions .cgc-action.cgc-done,
+#cgc-sidebar-actions .cgc-count {
+  color: var(--cgc-text-secondary);
+  font-weight: var(--cgc-ref-font-weight, 400);
+}
+
+#cgc-sidebar-actions .cgc-action {
+  height: auto;
+  padding: 2px 8px;
+}
+
+#cgc-sidebar-actions .cgc-action:hover {
+  color: var(--cgc-text);
+}
+
+/* Sidebar rows are tighter than Search results. */
+a:not([role="dialog"] a) > .cgc-checkbox {
+  margin-right: 8px;
+}
+
+/* ---------- Organized Recents list (only when not at defaults) ---------- */
+
+/* Lets rows be re-ordered visually with `order` (nothing is moved). */
+[data-cgc-organized="true"] {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+[data-cgc-filtered="true"] {
+  display: none !important;
+}
+
+/* "Today", "Yesterday", … — same text style as "Recents"; sticks while its
+   rows scroll under it. */
+.cgc-group-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 12px 10px 6px;
+  background: var(--cgc-surface);
+  color: var(--cgc-text-secondary);
+  font-size: var(--cgc-ref-font-size, 13px);
+  font-weight: var(--cgc-ref-font-weight, 400);
+  line-height: var(--cgc-ref-line-height, 20px);
+  letter-spacing: var(--cgc-ref-letter-spacing, normal);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* "2 days ago" at the end of a row. Hidden on hover, where ChatGPT shows
+   its own "…" and pin buttons. */
+.cgc-row-date {
+  flex: none;
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--cgc-text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+[data-cgc-organized="true"] > :hover .cgc-row-date {
+  visibility: hidden;
+}
+
+/* ---------- Options inside ChatGPT's "…" menu + our submenu ---------- */
+
+/* Our section sits at the end of ChatGPT's menu. Item size, spacing and
+   colors are copied from ChatGPT's own items (--cgc-item-*, --cgc-live-*). */
+.cgc-native-section {
+  display: block;
+  font-family: inherit;
+}
+
+/* The submenu floats beside ChatGPT's menu. */
+.cgc-fmenu {
+  position: fixed;
+  z-index: 2147483646;
+  box-sizing: border-box;
+  width: 280px;
+  /* Fixed theme colors (see --cgc-menu-* above), rounded like ChatGPT's. */
+  padding: 6px;
+  border: 1px solid var(--cgc-menu-border);
+  border-radius: 24px;
+  background: var(--cgc-menu-surface);
+  color: var(--cgc-text);
+  box-shadow: var(--cgc-menu-shadow);
+  font-family: inherit;
+  font-size: 14px;
+  /* ChatGPT turns off clicks on the rest of the page while its menu is open. */
+  pointer-events: auto;
+  animation: cgc-fade 100ms ease-out;
+}
+
+.cgc-fmenu-sub {
+  width: auto;
+  min-width: 170px;
+}
+
+.cgc-fmenu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--cgc-item-gap, 12px);
+  width: 100%;
+  min-height: var(--cgc-item-height, 40px);
+  box-sizing: border-box;
+  padding: var(--cgc-item-padding-y, 8px) var(--cgc-item-padding-x, 12px);
+  border: 0;
+  border-radius: var(--cgc-item-radius, 12px);
+  background: transparent;
+  color: var(--cgc-text);
+  font-family: inherit;
+  font-size: var(--cgc-item-font-size, 14px);
+  line-height: var(--cgc-item-line-height, 20px);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cgc-fmenu-item:hover:not(:disabled),
+.cgc-fmenu-item[aria-expanded="true"],
+.cgc-fmenu-item:focus-visible {
+  background: var(--cgc-menu-hover);
+  outline: none;
+}
+
+.cgc-fmenu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.cgc-fmenu-icon {
+  display: inline-flex;
+  flex: 0 0 18px;
+}
+
+.cgc-fmenu-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Current value, right-aligned and grey ("All", "Last activity"). */
+.cgc-fmenu-value {
+  color: var(--cgc-text-tertiary);
+}
+
+.cgc-fmenu-chevron {
+  display: inline-flex;
+  margin-right: -4px;
+  color: var(--cgc-text-tertiary);
+}
+
+/* Tick on the right of the chosen option. */
+.cgc-fmenu-tick {
+  display: inline-flex;
+  flex: 0 0 16px;
+  visibility: hidden;
+}
+
+.cgc-fmenu-item[aria-checked="true"] .cgc-fmenu-tick {
+  visibility: visible;
+}
+
+.cgc-fmenu-divider {
+  height: 1px;
+  margin: 6px 12px;
+  background: var(--cgc-menu-divider);
+}
+
+.cgc-fmenu-note {
+  margin: 0;
+  padding: 2px 12px 6px;
+  color: var(--cgc-text-tertiary);
+  font-size: 12px;
+  white-space: normal;
+}
+
+/* ChatGPT's "…" menu items hidden for an already-selected chat. */
+.cgc-menu-hidden {
+  display: none !important;
+}
+
+/* Bottom-of-sidebar bar: "3 selected   Archive   Delete". Centred under the
+   sidebar by content.js; bottom-left until then. Hidden while Search is
+   open, which has its own toolbar. */
+.cgc-sidebar-bar {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  max-width: calc(100vw - 24px);
+  padding: 4px 4px 4px 16px;
+  border: 1px solid var(--cgc-border-strong);
+  border-radius: 9999px;
+  background: var(--cgc-surface);
+  color: var(--cgc-text);
+  font-family: inherit;
+  font-size: 14px;
+  animation: cgc-fade 120ms ease-out;
+}
+
+.cgc-sidebar-bar.cgc-centered {
+  translate: -50% 0;
+}
+
+.cgc-sidebar-bar .cgc-count {
+  margin-right: 8px;
+  color: var(--cgc-text-secondary);
+}
+
+.cgc-sidebar-bar .cgc-action {
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  color: var(--cgc-text);
+  font-weight: 500;
+}
+
+/* Delete is red (text + icon) by default, like the Delete item in
+   ChatGPT's own "…" menu; a faint red tint on hover. */
+.cgc-sidebar-bar .cgc-action.cgc-delete,
+.cgc-sidebar-bar .cgc-action.cgc-delete:hover:not(:disabled) {
+  color: var(--cgc-danger);
+}
+
+.cgc-sidebar-bar .cgc-action.cgc-delete:hover:not(:disabled) {
+  background: var(--cgc-danger-tint);
+}
+
+/* =========================================================================
+   "Select" (tabs row) and the selection toolbar (replaces the tabs row)
+
+   Size and spacing come from --cgc-* variables that content.js copies from
+   ChatGPT's own elements: buttons from an inactive tab, the toolbar row
+   from the tabs row. The fallbacks are only used until then.
+   ========================================================================= */
+
+/* ChatGPT's tabs row while selecting: hidden, not removed. */
+[data-cgc-hidden="true"] {
+  display: none !important;
+}
+
+.cgc-selection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+  min-height: var(--cgc-row-height, 52px);
+  margin: var(--cgc-row-margin-top, 0) 0 var(--cgc-row-margin-bottom, 0);
+  /* Left padding: measured by content.js so "9 selected" starts exactly
+     where the search text above it starts. */
+  padding: var(--cgc-row-padding-top, 8px) var(--cgc-row-padding-right, 16px)
+    var(--cgc-row-padding-bottom, 8px) var(--cgc-align-left, var(--cgc-row-padding-left, 16px));
+  font-family: inherit;
+}
+
+.cgc-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.cgc-action,
+.cgc-count,
+.cgc-checkbox {
+  user-select: none; /* fast clicks shouldn't highlight the text */
+  -webkit-user-select: none;
+}
+
+.cgc-action {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  box-sizing: border-box;
+  height: var(--cgc-ref-height, auto);
+  padding: max(var(--cgc-ref-padding-y, 4px), 4px) max(var(--cgc-ref-padding-x, 10px), 8px);
+  border: 0;
+  border-radius: var(--cgc-ref-radius, 9999px);
+  background: transparent;
+  color: var(--cgc-text-secondary);
+  font-family: inherit;
+  font-size: var(--cgc-ref-font-size, 14px);
+  font-weight: var(--cgc-ref-font-weight, 400);
+  line-height: var(--cgc-ref-line-height, 20px);
+  letter-spacing: var(--cgc-ref-letter-spacing, normal);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.cgc-action:hover:not(:disabled) {
+  background: var(--cgc-hover);
+  color: var(--cgc-text);
+}
+
+.cgc-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* "Select" sits at the right end of the tabs row, next to the gear. */
+.cgc-select-entry {
+  margin-left: auto;
+  margin-right: 4px;
+}
+
+/* "Done" reads as the way out of selection mode. */
+.cgc-action.cgc-done {
+  color: var(--cgc-text);
+}
+
+/* Archive and Delete stay neutral; Delete only hints red on hover. The
+   strong red is saved for the final confirmation. */
+.cgc-action.cgc-delete:hover:not(:disabled) {
+  color: var(--cgc-danger);
+}
+
+/* "9 selected", aligned with the search text (see .cgc-selection-toolbar). */
+.cgc-count {
+  flex: none;
+  color: var(--cgc-text);
+  font-size: var(--cgc-ref-font-size, 14px);
+  line-height: var(--cgc-ref-line-height, 20px);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* =========================================================================
+   Result checkboxes (16px, in front of each chat result while selecting)
+   ========================================================================= */
+
+.cgc-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  margin-right: 12px;
+  align-self: center;
+  color: var(--cgc-text-tertiary);
+  cursor: pointer;
+}
+
+.cgc-checkbox .cgc-icon-check,
+.cgc-checkbox[aria-checked="true"] .cgc-icon-square {
+  display: none;
+}
+
+.cgc-checkbox[aria-checked="true"] .cgc-icon-check {
+  display: block;
+}
+
+.cgc-checkbox[aria-checked="true"] {
+  color: var(--cgc-text);
+}
+
+a:hover > .cgc-checkbox[aria-checked="false"] {
+  color: var(--cgc-text-secondary);
+}
+
+.cgc-checkmark {
+  stroke: var(--cgc-on-text);
+}
+
+/* =========================================================================
+   Confirmation dialog (matches ChatGPT's "Delete chat?")
+   Added to the page itself, so the dim backdrop covers the whole page,
+   including ChatGPT's Search window.
+   ========================================================================= */
+
+.cgc-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--cgc-backdrop);
+  font-family: inherit;
+  /* ChatGPT turns off clicks on the rest of the page while its Search
+     window is open; the dialog turns them back on for itself. */
+  pointer-events: auto;
+  animation: cgc-fade 120ms ease-out;
+}
+
+.cgc-dialog {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 448px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid var(--cgc-border);
+  border-radius: 24px;
+  background: var(--cgc-surface);
+  color: var(--cgc-text);
+  text-align: left;
+  animation: cgc-pop 140ms ease-out;
+}
+
+.cgc-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cgc-dialog-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.cgc-dialog-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  margin: -2px -6px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--cgc-text-secondary);
+  cursor: pointer;
+}
+
+.cgc-dialog-close:hover {
+  background: var(--cgc-hover);
+  color: var(--cgc-text);
+}
+
+.cgc-dialog-message {
+  margin: 8px 0 0;
+  color: var(--cgc-text-secondary);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.cgc-dialog-list {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  list-style: none;
+  border: 1px solid var(--cgc-border);
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.cgc-dialog-list li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cgc-dialog-list .cgc-dialog-more {
+  color: var(--cgc-text-tertiary);
+  font-size: 14px;
+}
+
+/* "Deleting 3 of 7…" / "Deleted 7 chats." */
+.cgc-dialog-progress {
+  margin: 16px 0 0;
+  color: var(--cgc-text);
+  font-size: 15px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Chats archived / deleted this session, until ChatGPT's own list catches up. */
+[data-cgc-removed="true"] {
+  display: none !important;
+}
+
+.cgc-dialog-note {
+  margin: 12px 0 0;
+  color: var(--cgc-text-tertiary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cgc-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+/* Pill buttons, as in ChatGPT's dialogs. */
+.cgc-btn {
+  padding: 8px 20px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background-color 120ms ease, opacity 120ms ease;
+}
+
+.cgc-btn-secondary {
+  border-color: var(--cgc-border-strong);
+  background: transparent;
+  color: var(--cgc-text);
+}
+
+.cgc-btn-secondary:hover {
+  background: var(--cgc-hover);
+}
+
+/* Archive confirm: filled with the text color (black in light, white in dark). */
+.cgc-btn-primary {
+  background: var(--cgc-text);
+  color: var(--cgc-on-text);
+}
+
+.cgc-btn-primary:hover {
+  opacity: 0.85;
+}
+
+/* Delete confirm: red text on a faint red tint, as in ChatGPT's dialog. */
+.cgc-btn-danger {
+  background: var(--cgc-danger-tint);
+  color: var(--cgc-danger);
+}
+
+.cgc-btn-danger:hover {
+  background: var(--cgc-danger-tint-hover);
+}
+
+/* =========================================================================
+   Focus + motion
+   ========================================================================= */
+
+.cgc-action:focus-visible,
+.cgc-dialog-close:focus-visible,
+.cgc-btn:focus-visible {
+  outline: 2px solid var(--cgc-text-tertiary);
+  outline-offset: 1px;
+}
+
+@keyframes cgc-fade {
+  from { opacity: 0; }
+}
+
+@keyframes cgc-pop {
+  from { opacity: 0; transform: scale(0.98); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cgc-backdrop,
+  .cgc-dialog {
+    animation: none;
+  }
+}
